@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from dotenv import load_dotenv
 from google.oauth2.service_account import Credentials
@@ -14,13 +14,25 @@ class Table:
     def __init__(self, name: str, columns: List[str]):
         self.name = name
         self.columns = columns
-        self._column_index = {col: idx for idx, col in enumerate(columns)}
+        self._column_index = {col.lower(): idx for idx, col in enumerate(columns)}
 
     def get_column_index(self, column: str) -> int:
         """Get the index of a column by its name."""
+        column = column.lower()
         if column not in self._column_index:
             raise ValueError(f"Column '{column}' not found in table '{self.name}'")
         return self._column_index[column]
+
+    def has_column(self, column: str) -> bool:
+        """Check if a column exists."""
+        return column.lower() in self._column_index
+
+    def add_column(self, column: str) -> None:
+        """Add a new column."""
+        if self.has_column(column):
+            return
+        self.columns.append(column)
+        self._column_index[column.lower()] = len(self.columns) - 1
 
     def get_range(self, columns: Optional[List[str]] = None) -> str:
         """Get the A1 notation range for specified columns or all columns."""
@@ -48,6 +60,27 @@ class SheetsManager:
         self.sheet = self.service.spreadsheets()
         self.tables: Dict[str, Table] = {}
 
+    def get_all_sheets(self) -> List[str]:
+        """Get all sheet names in the spreadsheet."""
+        spreadsheet = self.sheet.get(spreadsheetId=self.SHEET_ID).execute()
+        return [sheet['properties']['title'] for sheet in spreadsheet['sheets']]
+
+    def create_sheet(self, name: str) -> None:
+        """Create a new sheet with the given name."""
+        body = {
+            'requests': [{
+                'addSheet': {
+                    'properties': {
+                        'title': name
+                    }
+                }
+            }]
+        }
+        self.sheet.batchUpdate(
+            spreadsheetId=self.SHEET_ID,
+            body=body
+        ).execute()
+
     def init_table(self, name: str) -> Table:
         """Initialize a table by reading its header row."""
         range_name = f"{name}!A1:Z1"
@@ -57,7 +90,7 @@ class SheetsManager:
         ).execute()
         
         values = result.get('values', [[]])[0]
-        table = Table(name, values)
+        table = Table(name, values if values != [''] else [])
         self.tables[name] = table
         return table
 
@@ -66,6 +99,29 @@ class SheetsManager:
         if name not in self.tables:
             return self.init_table(name)
         return self.tables[name]
+
+    def add_columns(self, table_name: str, columns: List[str]) -> None:
+        """Add new columns to a table."""
+        table = self.get_table(table_name)
+        current_range = f"{table_name}!A1:{chr(65 + len(table.columns))}"
+        
+        # Get current headers
+        result = self.sheet.values().get(
+            spreadsheetId=self.SHEET_ID,
+            range=current_range
+        ).execute()
+        current_headers = result.get('values', [[]])[0]
+        
+        # Add new columns
+        new_headers = current_headers.copy()
+        for col in columns:
+            if col not in new_headers:
+                new_headers.append(col)
+                table.add_column(col)
+        
+        # Update headers if changed
+        if len(new_headers) > len(current_headers):
+            self.write_range(f"{table_name}!A1", [new_headers])
 
     def search_column(self, table_name: str, column: str, value: Any, exact: bool = True) -> List[Dict[str, Any]]:
         """
@@ -180,10 +236,24 @@ class SheetsManager:
             row_data: Dictionary mapping column names to values
         """
         table = self.get_table(table_name)
-        # Convert dictionary to list in correct column order
-        row_values = [row_data.get(col) for col in table.columns]
-        body = {'values': [row_values]}
         
+        # Check for new columns
+        new_columns = []
+        for col in row_data.keys():
+            if not table.has_column(col):
+                new_columns.append(col)
+        
+        # Add new columns if needed
+        if new_columns:
+            self.add_columns(table_name, new_columns)
+            table = self.get_table(table_name)  # Refresh table with new columns
+        
+        # Convert dictionary to list in correct column order
+        row_values = []
+        for col in table.columns:
+            row_values.append(row_data.get(col, ''))
+        
+        body = {'values': [row_values]}
         self.sheet.values().append(
             spreadsheetId=self.SHEET_ID,
             range=f"{table_name}!A:A",
@@ -243,4 +313,9 @@ class SheetsManager:
                 self.write_range(f"{table_name}!A{i+1}", [new_row])
                 return True
                 
-        return False 
+        return False
+
+    def get_columns(self, table_name: str) -> List[str]:
+        """Get all column names for a table."""
+        table = self.get_table(table_name)
+        return table.columns.copy() 

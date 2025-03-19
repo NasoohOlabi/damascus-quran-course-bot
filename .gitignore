@@ -1,2 +1,5 @@
+venv
+credentials.json
+.vscode
+__pycache__
 .env
-schoolcity-alolabi-9ce4762a3d4c.json

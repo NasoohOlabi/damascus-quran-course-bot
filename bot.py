@@ -1,10 +1,14 @@
+import asyncio
 import logging
 import os
+from datetime import timedelta
+from typing import Any, Dict, List, Optional
 
 from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import (Application, CommandHandler, ContextTypes,
-                          MessageHandler, filters)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import NetworkError, TimedOut
+from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
+                          ContextTypes, MessageHandler, filters)
 
 from sheets_manager import SheetsManager
 
@@ -25,170 +29,317 @@ if not TOKEN:
 # Initialize sheets manager
 sheets = SheetsManager()
 
-# Initialize the items table (will create if doesn't exist)
-ITEMS_TABLE = "Items"
-try:
-    sheets.get_table(ITEMS_TABLE)
-except Exception as e:
-    # Create the table with initial schema
-    sheets.write_range(f"{ITEMS_TABLE}!A1:C1", [["name", "description", "category"]])
-    sheets.init_table(ITEMS_TABLE)
+def parse_object(text: str) -> Optional[Dict[str, Any]]:
+    """Parse an object from message text."""
+    try:
+        result = {}
+        for line in text.strip().split('\n'):
+            if ':' not in line:
+                continue
+            key, value = line.split(':', 1)
+            key = key.strip()
+            value = value.strip()
+            if key and value:
+                result[key] = value
+        return result if result else None
+    except Exception as e:
+        logger.error(f"Error parsing object: {e}")
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     user = update.effective_user
+    sheets_list = sheets.get_all_sheets()
+    
+    keyboard = []
+    for sheet_name in sheets_list:
+        keyboard.append([InlineKeyboardButton(sheet_name, callback_data=f"select_sheet:{sheet_name}")])
+    keyboard.append([InlineKeyboardButton("➕ Create New Sheet", callback_data="create_sheet")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
     await update.message.reply_text(
-        f'Hi {user.first_name}! I am the Makin Damascus bot. '
-        'I can help you interact with our database.\n\n'
-        'Available commands:\n'
-        '/help - Show this help message\n'
-        '/add <name> | <description> | <category> - Add an item\n'
-        '/list - List all items\n'
-        '/search <column> <value> - Search items (exact match)\n'
-        '/fuzzy <column> <value> - Search items (fuzzy match)\n'
+        f'Hi {user.first_name}! Welcome to the Makin Damascus bot.\n\n'
+        'Please select a sheet to work with or create a new one:',
+        reply_markup=reply_markup
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /help is issued."""
     await update.message.reply_text(
-        'Available commands:\n'
-        '/help - Show this help message\n'
-        '/add <name> | <description> | <category> - Add an item\n'
-        '/list - List all items\n'
-        '/search <column> <value> - Search items (exact match)\n'
-        '/fuzzy <column> <value> - Search items (fuzzy match)\n'
+        'Send me data in this format:\n'
+        '```\n'
+        'field1: value1\n'
+        'field2: value2\n'
+        'field3: value3\n'
+        '```\n\n'
+        'Commands:\n'
+        '/start - Select or create a sheet\n'
+        '/sheets - List available sheets\n'
+        '/columns - Show columns in current sheet\n'
+        '/help - Show this help message',
+        parse_mode='Markdown'
     )
 
-async def add_item(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Add an item to the database."""
-    if not context.args:
+async def list_sheets(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """List all available sheets."""
+    sheets_list = sheets.get_all_sheets()
+    
+    keyboard = []
+    for sheet_name in sheets_list:
+        keyboard.append([InlineKeyboardButton(sheet_name, callback_data=f"select_sheet:{sheet_name}")])
+    keyboard.append([InlineKeyboardButton("➕ Create New Sheet", callback_data="create_sheet")])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        'Available sheets:\n'
+        'Click to select a sheet:',
+        reply_markup=reply_markup
+    )
+
+async def show_columns(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Show columns in the current sheet."""
+    if not context.user_data.get('current_sheet'):
         await update.message.reply_text(
-            'Please provide item details in the format:\n'
-            '/add <name> | <description> | <category>'
+            'Please select a sheet first using /start or /sheets'
         )
         return
 
-    # Join all arguments and split by pipe
-    item_data = ' '.join(context.args).split('|')
-    if len(item_data) != 3:
+    sheet_name = context.user_data['current_sheet']
+    columns = sheets.get_columns(sheet_name)
+    
+    if not columns:
         await update.message.reply_text(
-            'Please provide all required fields:\n'
-            '/add <name> | <description> | <category>'
+            f'Sheet "{sheet_name}" has no columns yet.\n'
+            'Send some data to create columns!'
         )
         return
 
-    # Create item dictionary
-    item = {
-        'name': item_data[0].strip(),
-        'description': item_data[1].strip(),
-        'category': item_data[2].strip()
-    }
+    await update.message.reply_text(
+        f'Columns in sheet "{sheet_name}":\n' +
+        '\n'.join(f'• {col}' for col in columns)
+    )
 
-    try:
-        sheets.append_row(ITEMS_TABLE, item)
-        await update.message.reply_text(f'Added item "{item["name"]}" to the database.')
-    except Exception as e:
-        logger.error(f"Error adding item: {e}")
-        await update.message.reply_text('Sorry, there was an error adding the item.')
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle button callbacks."""
+    query = update.callback_query
+    await query.answer()
+    
+    if query.data == "create_sheet":
+        context.user_data['awaiting_sheet_name'] = True
+        await query.message.reply_text(
+            "Please send me the name for the new sheet:"
+        )
+        return
+        
+    if query.data.startswith("select_sheet:"):
+        sheet_name = query.data.split(":", 1)[1]
+        context.user_data['current_sheet'] = sheet_name
+        await query.message.reply_text(
+            f'Selected sheet: "{sheet_name}"\n\n'
+            'Send me data in this format:\n'
+            '```\n'
+            'field1: value1\n'
+            'field2: value2\n'
+            'field3: value3\n'
+            '```',
+            parse_mode='Markdown'
+        )
+        return
+        
+    if query.data.startswith("add_column:"):
+        # Handle add column confirmation
+        sheet_name, column = query.data.split(":", 2)[1:]
+        sheets.add_columns(sheet_name, [column])
+        # Remove the pending column from context
+        if 'pending_columns' in context.user_data:
+            context.user_data['pending_columns'].remove(column)
+        
+        if context.user_data.get('pending_data'):
+            # Try to add the data again
+            await handle_object_data(
+                context.user_data['pending_data'],
+                sheet_name,
+                query.message,
+                context
+            )
+        return
+        
+    if query.data.startswith("skip_column:"):
+        # Handle skip column
+        _, column = query.data.split(":", 1)
+        if 'pending_columns' in context.user_data:
+            context.user_data['pending_columns'].remove(column)
+            
+        if context.user_data.get('pending_data'):
+            # Try to add the data again
+            await handle_object_data(
+                context.user_data['pending_data'],
+                context.user_data['current_sheet'],
+                query.message,
+                context
+            )
 
-async def list_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """List all items in the database."""
-    try:
-        items = sheets.read_range(f"{ITEMS_TABLE}!A:C")
-        if not items or len(items) <= 1:  # Only header row or empty
-            await update.message.reply_text('No items in the database.')
+async def handle_object_data(data: Dict[str, Any], sheet_name: str, message: Any, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle parsed object data."""
+    # Get current columns
+    current_columns = sheets.get_columns(sheet_name)
+    
+    # Find new columns
+    new_columns = []
+    for col in data.keys():
+        if col not in current_columns:
+            new_columns.append(col)
+    
+    # If there are new columns, ask for confirmation
+    if new_columns:
+        if 'pending_columns' not in context.user_data:
+            context.user_data['pending_columns'] = new_columns
+            context.user_data['pending_data'] = data
+        
+        if not context.user_data['pending_columns']:
+            # All columns have been handled
+            sheets.append_row(sheet_name, data)
+            await message.reply_text("✅ Data added successfully!")
+            context.user_data.pop('pending_data', None)
             return
-
-        message = "Items in database:\n\n"
-        for item in items[1:]:  # Skip header row
-            name = item[0] if len(item) > 0 else 'N/A'
-            desc = item[1] if len(item) > 1 else 'N/A'
-            category = item[2] if len(item) > 2 else 'N/A'
-            message += f"📌 {name}\n   Description: {desc}\n   Category: {category}\n\n"
+            
+        # Ask about the next column
+        column = context.user_data['pending_columns'][0]
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Yes", callback_data=f"add_column:{sheet_name}:{column}"),
+                InlineKeyboardButton("❌ No", callback_data=f"skip_column:{column}")
+            ]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        await update.message.reply_text(message)
-    except Exception as e:
-        logger.error(f"Error listing items: {e}")
-        await update.message.reply_text('Sorry, there was an error retrieving the items.')
+        await message.reply_text(
+            f'Found new column "{column}". Add it to the sheet?',
+            reply_markup=reply_markup
+        )
+        return
+    
+    # If no new columns, just add the data
+    sheets.append_row(sheet_name, data)
+    await message.reply_text("✅ Data added successfully!")
 
-async def search_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Search for items in the database (exact match)."""
-    if len(context.args) < 2:
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle incoming messages."""
+    if context.user_data.get('awaiting_sheet_name'):
+        # Create new sheet
+        sheet_name = update.message.text.strip()
+        try:
+            sheets.create_sheet(sheet_name)
+            context.user_data['current_sheet'] = sheet_name
+            context.user_data['awaiting_sheet_name'] = False
+            await update.message.reply_text(
+                f'Created sheet: "{sheet_name}"\n\n'
+                'Send me data in this format:\n'
+                '```\n'
+                'field1: value1\n'
+                'field2: value2\n'
+                'field3: value3\n'
+                '```',
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error creating sheet: {e}")
+            await update.message.reply_text(
+                f'Sorry, could not create sheet. Please try another name.'
+            )
+        return
+
+    if not context.user_data.get('current_sheet'):
         await update.message.reply_text(
-            'Please provide search details:\n'
-            '/search <column> <value>'
+            'Please select a sheet first using /start or /sheets'
         )
         return
 
-    column = context.args[0].lower()
-    value = ' '.join(context.args[1:])
-
-    try:
-        results = sheets.search_column(ITEMS_TABLE, column, value, exact=True)
-        if not results:
-            await update.message.reply_text(f'No items found matching "{value}" in column "{column}".')
-            return
-
-        message = f"Found {len(results)} matching items:\n\n"
-        for item in results:
-            message += f"📌 {item['name']}\n   Description: {item['description']}\n   Category: {item['category']}\n\n"
-        
-        await update.message.reply_text(message)
-    except ValueError as e:
-        await update.message.reply_text(f'Error: {str(e)}')
-    except Exception as e:
-        logger.error(f"Error searching items: {e}")
-        await update.message.reply_text('Sorry, there was an error searching for items.')
-
-async def fuzzy_search_items(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Search for items in the database (fuzzy match)."""
-    if len(context.args) < 2:
+    # Try to parse object data
+    data = parse_object(update.message.text)
+    if not data:
         await update.message.reply_text(
-            'Please provide search details:\n'
-            '/fuzzy <column> <value>'
+            'Please send data in this format:\n'
+            '```\n'
+            'field1: value1\n'
+            'field2: value2\n'
+            'field3: value3\n'
+            '```',
+            parse_mode='Markdown'
         )
         return
 
-    column = context.args[0].lower()
-    value = ' '.join(context.args[1:])
-
-    try:
-        results = sheets.fuzzy_search_column(ITEMS_TABLE, column, value)
-        if not results:
-            await update.message.reply_text(f'No items found similar to "{value}" in column "{column}".')
-            return
-
-        message = f"Found {len(results)} similar items (sorted by similarity):\n\n"
-        for item, distance in results[:5]:  # Show top 5 results
-            message += f"📌 {item['name']} (similarity: {100 - (distance * 100 / max(len(value), 1)):.0f}%)\n"
-            message += f"   Description: {item['description']}\n"
-            message += f"   Category: {item['category']}\n\n"
-        
-        if len(results) > 5:
-            message += f"(Showing top 5 of {len(results)} results)"
-        
-        await update.message.reply_text(message)
-    except ValueError as e:
-        await update.message.reply_text(f'Error: {str(e)}')
-    except Exception as e:
-        logger.error(f"Error searching items: {e}")
-        await update.message.reply_text('Sorry, there was an error searching for items.')
+    await handle_object_data(
+        data,
+        context.user_data['current_sheet'],
+        update.message,
+        context
+    )
 
 def main() -> None:
     """Start the bot."""
-    # Create the Application and pass it your bot's token
-    application = Application.builder().token(TOKEN).build()
+    # Configure the application with custom settings
+    defaults = {
+        "connect_timeout": 30.0,  # Increase connection timeout
+        "read_timeout": 30.0,    # Increase read timeout
+        "write_timeout": 30.0,   # Increase write timeout
+        "tzinfo": None  # Set timezone info to None to use system default
+    }
+    
+    application = (
+        Application.builder()
+        .token(TOKEN)
+        .defaults(defaults)
+        .get_updates_connect_timeout(30.0)  # Increase get_updates connection timeout
+        .get_updates_read_timeout(30.0)     # Increase get_updates read timeout
+        .build()
+    )
 
-    # Add command handlers
+    # Add handlers
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("add", add_item))
-    application.add_handler(CommandHandler("list", list_items))
-    application.add_handler(CommandHandler("search", search_items))
-    application.add_handler(CommandHandler("fuzzy", fuzzy_search_items))
+    application.add_handler(CommandHandler("sheets", list_sheets))
+    application.add_handler(CommandHandler("columns", show_columns))
+    application.add_handler(CallbackQueryHandler(handle_callback))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    # Start the Bot
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    # Configure error handling
+    application.add_error_handler(error_handler)
+
+    # Start the Bot with reconnection logic
+    while True:
+        try:
+            application.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,  # Ignore updates that occurred while the bot was offline
+                timeout=30,                 # Increase polling timeout
+            )
+        except (TimedOut, NetworkError) as e:
+            logger.error(f"Connection error: {e}")
+            logger.info("Waiting 10 seconds before retrying...")
+            import time
+            time.sleep(10)
+            continue
+        except Exception as e:
+            logger.error(f"Fatal error: {e}")
+            break
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle errors in the telegram bot."""
+    logger.error(f"Exception while handling an update: {context.error}")
+    
+    if isinstance(context.error, TimedOut):
+        logger.info("Connection timed out. Will retry automatically.")
+        return
+    
+    if isinstance(context.error, NetworkError):
+        logger.info("Network error occurred. Will retry automatically.")
+        return
+    
+    # For any other errors, log them but don't crash
+    logger.error("Update '%s' caused error '%s'", update, context.error)
 
 if __name__ == '__main__':
     main() 
