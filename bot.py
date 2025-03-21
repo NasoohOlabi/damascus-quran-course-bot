@@ -11,6 +11,8 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
                           ContextTypes, MessageHandler, filters)
 
 from sheets_manager import SheetsManager
+from src.handlers.data_entry_handler import DataEntryHandler
+from src.services.sheets_service import SheetsService
 
 # Enable logging
 logging.basicConfig(
@@ -22,12 +24,19 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+SPREADSHEET_ID = os.getenv('GOOGLE_SHEET_ID')
 
 if not TOKEN:
     raise ValueError("TELEGRAM_BOT_TOKEN not found in environment variables")
+if not SPREADSHEET_ID:
+    raise ValueError("GOOGLE_SHEET_ID not found in environment variables")
 
-# Initialize sheets manager
+# Initialize sheets manager and service
 sheets = SheetsManager()
+with open('credentials.json') as f:
+    import json
+    credentials = json.load(f)
+sheets_service = SheetsService(credentials, SPREADSHEET_ID)
 
 def parse_object(text: str) -> Optional[Dict[str, Any]]:
     """Parse an object from message text."""
@@ -126,24 +135,46 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     
-    if query.data == "create_sheet":
-        context.user_data['awaiting_sheet_name'] = True
+    if query.data.startswith("add_column:"):
+        # Handle add column confirmation
+        sheet_name, column = query.data.split(":", 2)[1:]
+        sheets.add_columns(sheet_name, [column])
+        
+        # Reset the data entry flow with updated columns
+        columns = sheets.get_columns(sheet_name)
+        context.user_data['pending_data'] = {}
+        context.user_data['columns'] = columns
+        context.user_data['current_column_index'] = 0
+        
+        # Start asking for values
         await query.message.reply_text(
-            "Please send me the name for the new sheet:"
+            f'Column added. Let\'s fill in the data!\n'
+            f'Please enter a value for: *{columns[0]}*',
+            parse_mode='Markdown'
         )
         return
-        
+
     if query.data.startswith("select_sheet:"):
         sheet_name = query.data.split(":", 1)[1]
         context.user_data['current_sheet'] = sheet_name
+        
+        # Get columns and prepare for data entry
+        columns = sheets.get_columns(sheet_name)
+        if not columns:
+            await query.message.reply_text(
+                f'Sheet "{sheet_name}" has no columns yet.\n'
+                'Please add some data first to create columns!'
+            )
+            return
+            
+        context.user_data['pending_data'] = {}
+        context.user_data['columns'] = columns
+        context.user_data['current_column_index'] = 0
+        
+        # Ask for the first column
         await query.message.reply_text(
-            f'Selected sheet: "{sheet_name}"\n\n'
-            'Send me data in this format:\n'
-            '```\n'
-            'field1: value1\n'
-            'field2: value2\n'
-            'field3: value3\n'
-            '```',
+            f'Selected sheet: "{sheet_name}"\n'
+            f'Please enter a value for: *{columns[0]}*',
             parse_mode='Markdown'
         )
         return
@@ -227,6 +258,44 @@ async def handle_object_data(data: Dict[str, Any], sheet_name: str, message: Any
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming messages."""
+    if context.user_data.get('columns') and 'current_column_index' in context.user_data:
+        # Handle column-based data entry
+        columns = context.user_data['columns']
+        current_index = context.user_data['current_column_index']
+        current_column = columns[current_index]
+        
+        # Store the value
+        context.user_data['pending_data'][current_column] = update.message.text.strip()
+        
+        # Move to next column
+        current_index += 1
+        context.user_data['current_column_index'] = current_index
+        
+        # Check if we're done
+        if current_index >= len(columns):
+            sheet_name = context.user_data['current_sheet']
+            data = context.user_data['pending_data']
+            
+            try:
+                sheets.append_row(sheet_name, data)
+                await update.message.reply_text("✅ Data added successfully!")
+                
+                # Clear the data entry state
+                context.user_data.pop('columns', None)
+                context.user_data.pop('current_column_index', None)
+                context.user_data.pop('pending_data', None)
+            except Exception as e:
+                logger.error(f"Error adding data: {e}")
+                await update.message.reply_text("❌ Failed to add data. Please try again.")
+            return
+            
+        # Prompt for next column
+        await update.message.reply_text(
+            f'Please enter a value for: *{columns[current_index]}*',
+            parse_mode='Markdown'
+        )
+        return
+        
     if context.user_data.get('awaiting_sheet_name'):
         # Create new sheet
         sheet_name = update.message.text.strip()
@@ -281,19 +350,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 def main() -> None:
     """Start the bot."""
     # Configure the application with custom settings
-    defaults = {
-        "connect_timeout": 30.0,  # Increase connection timeout
-        "read_timeout": 30.0,    # Increase read timeout
-        "write_timeout": 30.0,   # Increase write timeout
-        "tzinfo": None  # Set timezone info to None to use system default
-    }
-    
     application = (
         Application.builder()
         .token(TOKEN)
-        .defaults(defaults)
-        .get_updates_connect_timeout(30.0)  # Increase get_updates connection timeout
-        .get_updates_read_timeout(30.0)     # Increase get_updates read timeout
+        .connect_timeout(30.0)
+        .read_timeout(30.0)
+        .write_timeout(30.0)
+        .get_updates_connect_timeout(30.0)
+        .get_updates_read_timeout(30.0)
         .build()
     )
 
@@ -305,6 +369,10 @@ def main() -> None:
     application.add_handler(CallbackQueryHandler(handle_callback))
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
+    # Add data entry handler
+    data_entry_handler = DataEntryHandler(sheets_service)
+    application.add_handler(data_entry_handler.get_handler())
+    
     # Configure error handling
     application.add_error_handler(error_handler)
 
@@ -342,4 +410,4 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> N
     logger.error("Update '%s' caused error '%s'", update, context.error)
 
 if __name__ == '__main__':
-    main() 
+    main()
