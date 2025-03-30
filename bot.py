@@ -303,6 +303,33 @@ def validate_value(sheet_name: str, column: str, value: str, sheets: SheetsManag
 
 # Modify handle_message function's column-based data entry section
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if context.user_data.get('awaiting_sheet_name'):
+        # Create new sheet
+        sheet_name = update.message.text.strip()
+        try:
+            sheets.create_sheet(sheet_name)
+            # Freeze first two rows
+            sheets_service.freeze_rows(sheet_name, 2)
+            
+            context.user_data['current_sheet'] = sheet_name
+            context.user_data['awaiting_sheet_name'] = False
+            await update.message.reply_text(
+                f'Created sheet: "{sheet_name}"\n\n'
+                'Send me data in this format:\n'
+                '```\n'
+                'field1: value1\n'
+                'field2: value2\n'
+                'field3: value3\n'
+                '```',
+                parse_mode='Markdown'
+            )
+        except Exception as e:
+            logger.error(f"Error creating sheet: {e}")
+            await update.message.reply_text(
+                f'Sorry, could not create sheet. Please try another name.'
+            )
+        return
+
     if context.user_data.get('columns') and 'current_column_index' in context.user_data:
         columns = context.user_data['columns']
         current_index = context.user_data['current_column_index']
@@ -324,30 +351,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context.user_data['pending_data'][current_column] = value
         
         # Rest of the handler remains the same...
-
-    if context.user_data.get('awaiting_sheet_name'):
-        # Create new sheet
-        sheet_name = update.message.text.strip()
-        try:
-            sheets.create_sheet(sheet_name)
-            context.user_data['current_sheet'] = sheet_name
-            context.user_data['awaiting_sheet_name'] = False
-            await update.message.reply_text(
-                f'Created sheet: "{sheet_name}"\n\n'
-                'Send me data in this format:\n'
-                '```\n'
-                'field1: value1\n'
-                'field2: value2\n'
-                'field3: value3\n'
-                '```',
-                parse_mode='Markdown'
-            )
-        except Exception as e:
-            logger.error(f"Error creating sheet: {e}")
-            await update.message.reply_text(
-                f'Sorry, could not create sheet. Please try another name.'
-            )
-        return
 
     if not context.user_data.get('current_sheet'):
         await update.message.reply_text(

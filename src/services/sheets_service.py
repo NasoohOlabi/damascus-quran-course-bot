@@ -176,3 +176,26 @@ class SheetsService:
             
         except HttpError:
             return []
+    
+    def freeze_rows(self, sheet_name: str, rows: int) -> None:
+        """Freeze the specified number of rows in a sheet."""
+        try:
+            sheet_id = self._get_sheet_id(sheet_name)
+            request = {
+                'updateSheetProperties': {
+                    'properties': {
+                        'sheetId': sheet_id,
+                        'gridProperties': {
+                            'frozenRowCount': rows
+                        }
+                    },
+                    'fields': 'gridProperties.frozenRowCount'
+                }
+            }
+            self.service.spreadsheets().batchUpdate(
+                spreadsheetId=self.spreadsheet_id,
+                body={'requests': [request]}
+            ).execute()
+        except Exception as e:
+            logger.error(f"Error freezing rows: {e}")
+            raise
