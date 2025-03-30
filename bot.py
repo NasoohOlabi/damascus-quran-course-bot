@@ -12,6 +12,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 
 from sheets_manager import SheetsManager
 from src.handlers.data_entry_handler import DataEntryHandler
+from src.handlers.teacher_management_handler import handle_teacher_management
 from src.services.sheets_service import SheetsService
 from telegram import KeyboardButton, ReplyKeyboardMarkup
 
@@ -86,7 +87,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         '/start - Select or create a sheet\n'
         '/sheets - List available sheets\n'
         '/columns - Show columns in current sheet\n'
-        '/students - Manage students\n'  # Add this line
+        '/students - Manage students\n        '/teachers - Manage teachers\n'  # Add this line
         '/help - Show this help message',
         parse_mode='Markdown'
     )
@@ -148,6 +149,86 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         )
         return
         
+    if query.data == "add_teacher":
+        context.user_data['current_sheet'] = "Teachers"
+        context.user_data['adding_teacher'] = True
+        context.user_data['pending_data'] = {}
+        
+        # Start with teacher name
+        await query.message.reply_text(
+            "Please enter the teacher's name:",
+            parse_mode='Markdown'
+        )
+        return
+
+    if query.data == "list_teachers":
+        # Get teachers from sheet
+        teachers = sheets.get_values("Teachers", "A2:E")  # Get name, email, phone, status, specialization
+        if not teachers:
+            await query.message.reply_text("No teachers found.")
+            return
+            
+        # Format teacher list
+        response = "📋 *Teacher List*\n\n"
+        for teacher in teachers:
+            name = teacher[0] if len(teacher) > 0 else "N/A"
+            status = teacher[3] if len(teacher) > 3 else "N/A"
+            specialization = teacher[4] if len(teacher) > 4 else "N/A"
+            response += f"*{name}*\n"
+            response += f"Status: {status}\n"
+            response += f"Specialization: {specialization}\n\n"
+        
+        await query.message.reply_text(response, parse_mode='Markdown')
+        return
+
+    if query.data == "update_teacher_status":
+        # Get list of active teachers for status update
+        teachers = sheets.get_values("Teachers", "A2:D")  # Get name and status
+        if not teachers:
+            await query.message.reply_text("No teachers found to update.")
+            return
+            
+        keyboard = []
+        for teacher in teachers:
+            name = teacher[0] if len(teacher) > 0 else "N/A"
+            status = teacher[3] if len(teacher) > 3 else "active"
+            keyboard.append([InlineKeyboardButton(
+                f"{name} ({status})",
+                callback_data=f"teacher_status:{name}"
+            )])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text(
+            "Select a teacher to update their status:",
+            reply_markup=reply_markup
+        )
+        return
+
+    if query.data.startswith("teacher_status:"):
+        teacher_name = query.data.split(":")[1]
+        keyboard = [
+            [InlineKeyboardButton("✅ Active", callback_data=f"set_status:{teacher_name}:active")],
+            [InlineKeyboardButton("⚠️ Suspended", callback_data=f"set_status:{teacher_name}:suspended")],
+            [InlineKeyboardButton("❌ Inactive", callback_data=f"set_status:{teacher_name}:inactive")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await query.message.reply_text(
+            f"Select new status for {teacher_name}:",
+            reply_markup=reply_markup
+        )
+        return
+
+    if query.data.startswith("set_status:"):
+        _, teacher_name, new_status = query.data.split(":")
+        # Update teacher status in sheet
+        teachers = sheets.get_values("Teachers", "A2:D")
+        for i, teacher in enumerate(teachers):
+            if teacher[0] == teacher_name:
+                sheets.update_cell("Teachers", i + 2, 4, new_status)  # +2 for header rows
+                await query.message.reply_text(f"✅ Updated {teacher_name}'s status to {new_status}")
+                return
+
     if query.data == "list_students":
         # Get students from sheet
         students = sheets.get_values("Students", "A2:E")  # Get name, age, teacher, status, join_date
@@ -680,3 +761,4 @@ def main() -> None:
     # Add to main function
     application.add_handler(CommandHandler("students", handle_students))
     application.add_handler(CommandHandler("columns", show_columns))
+    application.add_handler(CommandHandler("teachers", lambda update, context: handle_teacher_management(update, context, sheets_service)))
