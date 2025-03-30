@@ -75,7 +75,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Send a message when the command /help is issued."""
     await update.message.reply_text(
         'Send me data in this format:\n'
         '```\n'
@@ -87,6 +86,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         '/start - Select or create a sheet\n'
         '/sheets - List available sheets\n'
         '/columns - Show columns in current sheet\n'
+        '/students - Manage students\n'  # Add this line
         '/help - Show this help message',
         parse_mode='Markdown'
     )
@@ -414,48 +414,89 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("sheets", list_sheets))
     application.add_handler(CommandHandler("columns", show_columns))
-    application.add_handler(CallbackQueryHandler(handle_callback))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    # Add data entry handler
-    data_entry_handler = DataEntryHandler(sheets_service)
-    application.add_handler(data_entry_handler.get_handler())
+    # Add near other async functions
+    async def handle_students(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /students command."""
+    # Create students sheet if it doesn't exist
+    if "Students" not in sheets.get_all_sheets():
+        sheets.create_sheet("Students")
+        sheets_service.freeze_rows("Students", 2)
+        
+        # Add required columns
+        student_columns = [
+            "name",
+            "age",
+            "teacher",
+            "status",  # active/inactive
+            "join_date",
+            "created",
+            "created_by",
+            "last_modified",
+            "last_modified_by"
+        ]
+        sheets.add_columns("Students", student_columns)
+        
+        # Add validation rules in second row
+        validation_rules = [
+            "",  # name - no validation
+            "regex:^[0-9]+$",  # age - numbers only
+            f"list:Users!A:A",  # teacher - must be from Users sheet
+            "list:active,inactive",  # status
+            "",  # join_date
+            "",  # created
+            "",  # created_by
+            "",  # last_modified
+            ""   # last_modified_by
+        ]
+        sheets.update_row("Students", 1, validation_rules)  # Add validation rules in second row
     
-    # Configure error handling
-    application.add_error_handler(error_handler)
-
-    # Start the Bot with reconnection logic
-    while True:
-        try:
-            application.run_polling(
-                allowed_updates=Update.ALL_TYPES,
-                drop_pending_updates=True,  # Ignore updates that occurred while the bot was offline
-                timeout=30,                 # Increase polling timeout
+    keyboard = [
+        [InlineKeyboardButton("➕ Add New Student", callback_data="add_student")],
+        [InlineKeyboardButton("📋 List Students", callback_data="list_students")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        "Student Management\n\n"
+        "What would you like to do?",
+        reply_markup=reply_markup
+    )
+    
+    # Add to handle_callback function
+    async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        query = update.callback_query
+        await query.answer()
+        
+        if query.data == "add_student":
+            context.user_data['current_sheet'] = "Students"
+            context.user_data['adding_student'] = True
+            context.user_data['pending_data'] = {}
+            
+            # Start with student name
+            await query.message.reply_text(
+                "Please enter the student's name:",
+                parse_mode='Markdown'
             )
-        except (TimedOut, NetworkError) as e:
-            logger.error(f"Connection error: {e}")
-            logger.info("Waiting 10 seconds before retrying...")
-            import time
-            time.sleep(10)
-            continue
-        except Exception as e:
-            logger.error(f"Fatal error: {e}")
-            break
-
-async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle errors in the telegram bot."""
-    logger.error(f"Exception while handling an update: {context.error}")
-    
-    if isinstance(context.error, TimedOut):
-        logger.info("Connection timed out. Will retry automatically.")
-        return
-    
-    if isinstance(context.error, NetworkError):
-        logger.info("Network error occurred. Will retry automatically.")
-        return
-    
-    # For any other errors, log them but don't crash
-    logger.error("Update '%s' caused error '%s'", update, context.error)
-
-if __name__ == '__main__':
-    main()
+            return
+            
+        if query.data == "list_students":
+            # Get students from sheet
+            students = sheets.get_values("Students", "A2:E")  # Get name, age, teacher, status, join_date
+            if not students:
+                await query.message.reply_text("No students found.")
+                return
+                
+            # Format student list
+            response = "📋 *Student List*\n\n"
+            for student in students:
+                name = student[0] if len(student) > 0 else "N/A"
+                teacher = student[2] if len(student) > 2 else "N/A"
+                status = student[3] if len(student) > 3 else "N/A"
+                response += f"*{name}*\n"
+                response += f"Teacher: {teacher}\n"
+                response += f"Status: {status}\n\n"
+            
+            await query.message.reply_text(response, parse_mode='Markdown')
+            return
+        
+    # ... existing callback handlers ...
