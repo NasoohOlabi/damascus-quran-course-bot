@@ -134,5 +134,7 @@ class DataEntryHandler:
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_data_entry)
                 ]
             },
-            fallbacks=[CommandHandler("cancel", self.cancel)]
+            fallbacks=[CommandHandler("cancel", self.cancel)],
+            per_message=False,
+            per_chat=True
         )
