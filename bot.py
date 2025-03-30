@@ -13,6 +13,7 @@ from telegram.ext import (Application, CallbackQueryHandler, CommandHandler,
 from sheets_manager import SheetsManager
 from src.handlers.data_entry_handler import DataEntryHandler
 from src.services.sheets_service import SheetsService
+from telegram import KeyboardButton, ReplyKeyboardMarkup
 
 # Enable logging
 logging.basicConfig(
@@ -217,6 +218,17 @@ async def handle_object_data(data: Dict[str, Any], sheet_name: str, message: Any
     # Get current columns
     current_columns = sheets.get_columns(sheet_name)
     
+    # Add audit data
+    user = message.from_user
+    timestamp = message.date.strftime("%Y-%m-%d %H:%M:%S")
+    
+    # Add audit fields to the data
+    if not current_columns:  # New sheet
+        data["created"] = timestamp
+        data["created_by"] = user.username or user.first_name
+    data["last_modified"] = timestamp
+    data["last_modified_by"] = user.username or user.first_name
+    
     # Find new columns
     new_columns = []
     for col in data.keys():
@@ -310,6 +322,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             sheets.create_sheet(sheet_name)
             # Freeze first two rows
             sheets_service.freeze_rows(sheet_name, 2)
+            
+            # Add audit columns
+            audit_columns = ["created", "created_by", "last_modified", "last_modified_by"]
+            sheets.add_columns(sheet_name, audit_columns)
             
             context.user_data['current_sheet'] = sheet_name
             context.user_data['awaiting_sheet_name'] = False
