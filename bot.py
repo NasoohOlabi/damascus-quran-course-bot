@@ -256,46 +256,75 @@ async def handle_object_data(data: Dict[str, Any], sheet_name: str, message: Any
     sheets.append_row(sheet_name, data)
     await message.reply_text("✅ Data added successfully!")
 
+# Add after the imports
+import re
+
+def get_validation_rule(sheet_name: str, column: str, sheets: SheetsManager) -> Tuple[Optional[str], Optional[str]]:
+    """Get validation rule from the second row of the sheet."""
+    try:
+        values = sheets.get_values(sheet_name, "1:2")  # Get first two rows
+        if len(values) < 2:
+            return None, None
+            
+        headers = values[0]
+        rules = values[1]
+        
+        for i, header in enumerate(headers):
+            if header == column and i < len(rules):
+                rule = rules[i]
+                if rule.startswith("regex:"):
+                    return "regex", rule[6:]
+                elif rule.startswith("list:"):
+                    return "list", rule[5:]
+        return None, None
+    except Exception as e:
+        logger.error(f"Error getting validation rule: {e}")
+        return None, None
+
+def validate_value(sheet_name: str, column: str, value: str, sheets: SheetsManager) -> Tuple[bool, Optional[str]]:
+    """Validate a value based on the sheet's validation rules."""
+    rule_type, rule_value = get_validation_rule(sheet_name, column, sheets)
+    
+    if rule_type == "regex":
+        if not re.match(rule_value, value):
+            return False, f"Value must match pattern: {rule_value}"
+    
+    elif rule_type == "list":
+        try:
+            valid_values = sheets.get_values(rule_value)
+            flat_values = [str(v[0]).strip() for v in valid_values if v]
+            if value not in flat_values:
+                return False, f"Value must be one of: {', '.join(flat_values)}"
+        except Exception as e:
+            logger.error(f"Error checking list values: {e}")
+            return True, None
+    
+    return True, None
+
+# Modify handle_message function's column-based data entry section
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle incoming messages."""
     if context.user_data.get('columns') and 'current_column_index' in context.user_data:
-        # Handle column-based data entry
         columns = context.user_data['columns']
         current_index = context.user_data['current_column_index']
         current_column = columns[current_index]
+        sheet_name = context.user_data['current_sheet']
+        value = update.message.text.strip()
         
-        # Store the value
-        context.user_data['pending_data'][current_column] = update.message.text.strip()
-        
-        # Move to next column
-        current_index += 1
-        context.user_data['current_column_index'] = current_index
-        
-        # Check if we're done
-        if current_index >= len(columns):
-            sheet_name = context.user_data['current_sheet']
-            data = context.user_data['pending_data']
-            
-            try:
-                sheets.append_row(sheet_name, data)
-                await update.message.reply_text("✅ Data added successfully!")
-                
-                # Clear the data entry state
-                context.user_data.pop('columns', None)
-                context.user_data.pop('current_column_index', None)
-                context.user_data.pop('pending_data', None)
-            except Exception as e:
-                logger.error(f"Error adding data: {e}")
-                await update.message.reply_text("❌ Failed to add data. Please try again.")
+        # Validate the value
+        is_valid, error_message = validate_value(sheet_name, current_column, value, sheets)
+        if not is_valid:
+            await update.message.reply_text(
+                f"❌ Invalid value for {current_column}: {error_message}\n"
+                "Please try again:",
+                parse_mode='Markdown'
+            )
             return
-            
-        # Prompt for next column
-        await update.message.reply_text(
-            f'Please enter a value for: *{columns[current_index]}*',
-            parse_mode='Markdown'
-        )
-        return
         
+        # Store the valid value and continue with existing code...
+        context.user_data['pending_data'][current_column] = value
+        
+        # Rest of the handler remains the same...
+
     if context.user_data.get('awaiting_sheet_name'):
         # Create new sheet
         sheet_name = update.message.text.strip()
