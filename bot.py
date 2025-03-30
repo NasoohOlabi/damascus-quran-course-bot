@@ -136,6 +136,38 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     query = update.callback_query
     await query.answer()
     
+    if query.data == "add_student":
+        context.user_data['current_sheet'] = "Students"
+        context.user_data['adding_student'] = True
+        context.user_data['pending_data'] = {}
+        
+        # Start with student name
+        await query.message.reply_text(
+            "Please enter the student's name:",
+            parse_mode='Markdown'
+        )
+        return
+        
+    if query.data == "list_students":
+        # Get students from sheet
+        students = sheets.get_values("Students", "A2:E")  # Get name, age, teacher, status, join_date
+        if not students:
+            await query.message.reply_text("No students found.")
+            return
+            
+        # Format student list
+        response = "📋 *Student List*\n\n"
+        for student in students:
+            name = student[0] if len(student) > 0 else "N/A"
+            teacher = student[2] if len(student) > 2 else "N/A"
+            status = student[3] if len(student) > 3 else "N/A"
+            response += f"*{name}*\n"
+            response += f"Teacher: {teacher}\n"
+            response += f"Status: {status}\n\n"
+        
+        await query.message.reply_text(response, parse_mode='Markdown')
+        return
+
     if query.data.startswith("add_column:"):
         # Handle add column confirmation
         sheet_name, column = query.data.split(":", 2)[1:]
@@ -395,6 +427,114 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         context
     )
 
+async def handle_change_spreadsheet(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the /change_spreadsheet command."""
+    # Check if user is owner
+    if str(update.effective_user.id) != os.getenv('OWNER_ID'):
+        await update.message.reply_text("This command is only available to the bot owner.")
+        return
+    
+    # Ask for new spreadsheet name
+    await update.message.reply_text(
+        "Please enter the name for the new spreadsheet:\n\n"
+        "Note: This will create a new Google Spreadsheet with all necessary sheets."
+    )
+    return AWAIT_SPREADSHEET_NAME
+
+# Add state constants
+AWAIT_SPREADSHEET_NAME = 'AWAIT_SPREADSHEET_NAME'
+AWAIT_COPY_CONFIRMATION = 'AWAIT_COPY_CONFIRMATION'
+
+async def handle_spreadsheet_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the new spreadsheet name input."""
+    new_spreadsheet_name = update.message.text.strip()
+    
+    try:
+        # Create new spreadsheet
+        result = sheets_service.create_sheet(new_spreadsheet_name)
+        new_spreadsheet_id = sheets_service.spreadsheet_id
+        
+        # Store the old spreadsheet ID for potential data migration
+        context.user_data['old_spreadsheet_id'] = SPREADSHEET_ID
+        context.user_data['new_spreadsheet_id'] = new_spreadsheet_id
+        
+        # Ask if user wants to copy students and teachers data
+        keyboard = [
+            [InlineKeyboardButton("Yes", callback_data="copy_data:yes"),
+             InlineKeyboardButton("No", callback_data="copy_data:no")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        
+        await update.message.reply_text(
+            f"New spreadsheet '{new_spreadsheet_name}' created successfully!\n\n"
+            "Would you like to copy existing students and teachers data to the new spreadsheet?",
+            reply_markup=reply_markup
+        )
+        
+        return AWAIT_COPY_CONFIRMATION
+        
+    except Exception as e:
+        await update.message.reply_text(f"Error creating spreadsheet: {str(e)}")
+        return ConversationHandler.END
+
+async def handle_copy_confirmation(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handle the confirmation for copying data."""
+    query = update.callback_query
+    await query.answer()
+    
+    choice = query.data.split(':')[1]
+    
+    if choice == 'yes':
+        try:
+            old_id = context.user_data['old_spreadsheet_id']
+            new_id = context.user_data['new_spreadsheet_id']
+            
+            # Create temporary service instances for both spreadsheets
+            old_service = SheetsService(credentials, old_id)
+            new_service = SheetsService(credentials, new_id)
+            
+            # Copy students data
+            students_data = old_service.get_rows('Students')
+            if students_data:
+                for row in students_data:
+                    new_service.append_row('Students', row)
+            
+            # Copy teachers data
+            teachers_data = old_service.get_rows('Teachers')
+            if teachers_data:
+                for row in teachers_data:
+                    new_service.append_row('Teachers', row)
+            
+            await query.message.reply_text(
+                "✅ Data copied successfully! The bot will now use the new spreadsheet."
+            )
+        except Exception as e:
+            await query.message.reply_text(f"Error copying data: {str(e)}")
+    else:
+        await query.message.reply_text(
+            "✅ New spreadsheet setup complete! The bot will now use the new spreadsheet."
+        )
+    
+    # Update the environment variable
+    os.environ['GOOGLE_SHEET_ID'] = context.user_data['new_spreadsheet_id']
+    
+    # Clean up user data
+    context.user_data.pop('old_spreadsheet_id', None)
+    context.user_data.pop('new_spreadsheet_id', None)
+    
+    return ConversationHandler.END
+
+# Add conversation handler for spreadsheet change
+spreadsheet_change_handler = ConversationHandler(
+    entry_points=[CommandHandler('change_spreadsheet', handle_change_spreadsheet)],
+    states={
+        AWAIT_SPREADSHEET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, handle_spreadsheet_name)],
+        AWAIT_COPY_CONFIRMATION: [CallbackQueryHandler(handle_copy_confirmation)]
+    },
+    fallbacks=[]
+)
+
+# Update the main() function to add the new handler
 def main() -> None:
     """Start the bot."""
     # Configure the application with custom settings
@@ -414,53 +554,54 @@ def main() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("sheets", list_sheets))
     application.add_handler(CommandHandler("columns", show_columns))
+    application.add_handler(CommandHandler("progress", lambda update, context: handle_student_progress(update, context, sheets_service)))
     # Add near other async functions
     async def handle_students(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handle the /students command."""
-    # Create students sheet if it doesn't exist
-    if "Students" not in sheets.get_all_sheets():
-        sheets.create_sheet("Students")
-        sheets_service.freeze_rows("Students", 2)
+        """Handle the /students command."""
+        # Create students sheet if it doesn't exist
+        if "Students" not in sheets.get_all_sheets():
+            sheets.create_sheet("Students")
+            sheets_service.freeze_rows("Students", 2)
+            
+            # Add required columns
+            student_columns = [
+                "name",
+                "age",
+                "teacher",
+                "status",  # active/inactive
+                "join_date",
+                "created",
+                "created_by",
+                "last_modified",
+                "last_modified_by"
+            ]
+            sheets.add_columns("Students", student_columns)
+            
+            # Add validation rules in second row
+            validation_rules = [
+                "",  # name - no validation
+                "regex:^[0-9]+$",  # age - numbers only
+                f"list:Users!A:A",  # teacher - must be from Users sheet
+                "list:active,inactive",  # status
+                "",  # join_date
+                "",  # created
+                "",  # created_by
+                "",  # last_modified
+                ""   # last_modified_by
+            ]
+            sheets.update_row("Students", 1, validation_rules)  # Add validation rules in second row
         
-        # Add required columns
-        student_columns = [
-            "name",
-            "age",
-            "teacher",
-            "status",  # active/inactive
-            "join_date",
-            "created",
-            "created_by",
-            "last_modified",
-            "last_modified_by"
+        keyboard = [
+            [InlineKeyboardButton("➕ Add New Student", callback_data="add_student")],
+            [InlineKeyboardButton("📋 List Students", callback_data="list_students")]
         ]
-        sheets.add_columns("Students", student_columns)
+        reply_markup = InlineKeyboardMarkup(keyboard)
         
-        # Add validation rules in second row
-        validation_rules = [
-            "",  # name - no validation
-            "regex:^[0-9]+$",  # age - numbers only
-            f"list:Users!A:A",  # teacher - must be from Users sheet
-            "list:active,inactive",  # status
-            "",  # join_date
-            "",  # created
-            "",  # created_by
-            "",  # last_modified
-            ""   # last_modified_by
-        ]
-        sheets.update_row("Students", 1, validation_rules)  # Add validation rules in second row
-    
-    keyboard = [
-        [InlineKeyboardButton("➕ Add New Student", callback_data="add_student")],
-        [InlineKeyboardButton("📋 List Students", callback_data="list_students")]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(
-        "Student Management\n\n"
-        "What would you like to do?",
-        reply_markup=reply_markup
-    )
+        await update.message.reply_text(
+            "Student Management\n\n"
+            "What would you like to do?",
+            reply_markup=reply_markup
+        )
     
     # Add to handle_callback function
     async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -498,5 +639,44 @@ def main() -> None:
             
             await query.message.reply_text(response, parse_mode='Markdown')
             return
+            
+    if query.data == "add_progress":
+        context.user_data['current_sheet'] = "StudentProgress"
+        context.user_data['adding_progress'] = True
+        context.user_data['pending_data'] = {}
         
-    # ... existing callback handlers ...
+        # Start with student name
+        await query.message.reply_text(
+            "Please enter the student's name:",
+            parse_mode='Markdown'
+        )
+        return
+        
+    if query.data == "view_progress":
+        # Get progress notes from sheet
+        progress = sheets.get_values("StudentProgress", "A2:E")  # Get student_name, notes, pages, sura, date
+        if not progress:
+            await query.message.reply_text("No progress notes found.")
+            return
+            
+        # Format progress list
+        response = "📋 *Student Progress Notes*\n\n"
+        for note in progress:
+            student = note[0] if len(note) > 0 else "N/A"
+            notes = note[1] if len(note) > 1 else "N/A"
+            pages = note[2] if len(note) > 2 else ""
+            sura = note[3] if len(note) > 3 else ""
+            date = note[4] if len(note) > 4 else "N/A"
+            
+            response += f"*{student}* - {date}\n"
+            response += f"Notes: {notes}\n"
+            if pages: response += f"Pages: {pages}\n"
+            if sura: response += f"Sura: {sura}\n"
+            response += "\n"
+        
+        await query.message.reply_text(response, parse_mode='Markdown')
+        return
+        
+    # Add to main function
+    application.add_handler(CommandHandler("students", handle_students))
+    application.add_handler(CommandHandler("columns", show_columns))
