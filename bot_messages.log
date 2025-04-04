@@ -1,0 +1,6 @@
+2025-04-04 20:15:33,655 - Main - INFO - Initializing bot application
+2025-04-04 20:15:39,974 - src.utils.logging_utils - INFO - Message received from 8194513527 (no username): '/start' in chat 8194513527
+2025-04-04 20:15:39,974 - bot.bot - INFO - User Nasooh started the bot
+2025-04-04 20:16:54,960 - Main - INFO - Initializing bot application
+2025-04-04 20:16:57,040 - src.utils.logging_utils - INFO - Message received from 8194513527 (no username): '/start' in chat 8194513527
+2025-04-04 20:16:57,040 - bot.bot - INFO - User Nasooh started the bot

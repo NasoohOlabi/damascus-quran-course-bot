@@ -1,7 +1,11 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
-from src.services.sheets_service import SheetsService
 
+from src.services.sheets_service import SheetsService
+from src.utils.logging_utils import log_message
+
+
+@log_message
 async def handle_teacher_management(update: Update, context: ContextTypes.DEFAULT_TYPE, sheets_service: SheetsService) -> None:
     """Handle the /teachers command for managing teachers."""
     # Create Teachers sheet if it doesn't exist
@@ -54,10 +58,14 @@ async def handle_teacher_management(update: Update, context: ContextTypes.DEFAUL
         reply_markup=reply_markup
     )
 
+@log_message
 async def handle_add_teacher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Please enter the teacher's name:")
-    return TEACHER
+    # Return a numeric value instead of the undefined TEACHER constant
+    return 3  # Using 3 as the value for TEACHER state
 
+@log_message
 async def handle_remove_teacher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Please select a teacher to remove:")
-    return TEACHER
+    # Return a numeric value instead of the undefined TEACHER constant
+    return 3  # Using 3 as the value for TEACHER state

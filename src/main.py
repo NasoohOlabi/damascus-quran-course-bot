@@ -2,9 +2,9 @@ import asyncio
 import os
 
 from dotenv import load_dotenv
-from telegram.ext import Application
+from telegram.ext import Application, CommandHandler
 
-from src.bot.bot import start_bot
+from bot.bot import handle_menu_choice, handle_start
 from src.config.config import BotConfig
 from src.utils.logger import setup_logger
 
@@ -21,11 +21,16 @@ def main():
     
     application = Application.builder().token(config.TOKEN).build()
     
-    # Register event handlers
-    from telegram.ext import CommandHandler
-
-    from bot.bot import handle_start
-    application.add_handler(CommandHandler('start', handle_start))
+    # Register all command handlers
+    handlers = [
+        CommandHandler('start', handle_start),
+        # handle_menu_choice
+        CommandHandler('menu', handle_menu_choice),
+    ]
+    
+    for handler in handlers:
+        application.add_handler(handler)
+    
     application.run_polling()
 
 if __name__ == '__main__':
