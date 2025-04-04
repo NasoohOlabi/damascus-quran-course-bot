@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" id="mermaid-svg" width="100%" height="100%" viewBox="0 0 800 1000" style="max-width: 800px;" class="mermaid">
+<style>
+  .node rect { fill: #ECECFF; stroke: #9370DB; stroke-width: 1px; }
+  .node.top rect { fill: #E6F3FF; stroke: #2980B9; }
+  .node.second rect { fill: #E6FFE6; stroke: #27AE60; }
+  .node.third rect { fill: #FFF0E6; stroke: #E67E22; }
+  .node.meta rect { fill: #F5F5F5; stroke: #7F8C8D; }
+  .node.end rect { fill: #FFE6E6; stroke: #E74C3C; }
+  .edgeLabel { background-color: white; padding: 2px; border-radius: 2px; font-size: 10px; }
+  .edgePath path { stroke: #333; stroke-width: 1.5px; }
+  .cluster rect { fill: #f0f0f0; stroke: #ddd; stroke-width: 1px; rx: 5px; ry: 5px; }
+  .cluster text { font-weight: bold; }
+</style>
+<g>
+  <!-- Title -->
+  <text x="400" y="30" text-anchor="middle" font-family="Arial" font-size="20" font-weight="bold">Makin Damascus Bot - Conversation Flow</text>
+  
+  <!-- Top Level Conversation Handler -->
+  <g transform="translate(0, 60)">
+    <rect x="50" y="0" width="700" height="280" rx="5" ry="5" fill="#E6F3FF" fill-opacity="0.2" stroke="#2980B9" stroke-width="1" stroke-dasharray="5,5" />
+    <text x="400" y="20" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#2980B9">Top Level Conversation Handler</text>
+    
+    <!-- Top Level States -->
+    <rect x="100" y="40" width="150" height="40" rx="5" ry="5" fill="#E6F3FF" stroke="#2980B9" />
+    <text x="175" y="65" text-anchor="middle" font-family="Arial" font-size="12">/start (Entry Point)</text>
+    
+    <rect x="100" y="100" width="150" height="40" rx="5" ry="5" fill="#E6F3FF" stroke="#2980B9" />
+    <text x="175" y="125" text-anchor="middle" font-family="Arial" font-size="12">SELECTING_ACTION</text>
+    
+    <rect x="100" y="160" width="150" height="40" rx="5" ry="5" fill="#E6F3FF" stroke="#2980B9" />
+    <text x="175" y="185" text-anchor="middle" font-family="Arial" font-size="12">SHOWING</text>
+    
+    <rect x="100" y="220" width="150" height="40" rx="5" ry="5" fill="#E6F3FF" stroke="#2980B9" />
+    <text x="175" y="245" text-anchor="middle" font-family="Arial" font-size="12">DESCRIBING_SELF</text>
+    
+    <!-- Arrows for Top Level -->
+    <path d="M175,80 L175,100" stroke="#2980B9" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <path d="M250,120 C300,120 300,180 250,180" stroke="#2980B9" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="310" y="140" font-family="Arial" font-size="10" fill="#2980B9">Show Data</text>
+    
+    <path d="M250,120 C320,120 320,240 250,240" stroke="#2980B9" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="330" y="170" font-family="Arial" font-size="10" fill="#2980B9">Add Self</text>
+    
+    <path d="M175,200 L175,220" stroke="#2980B9" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+  </g>
+  
+  <!-- Second Level Conversation Handler -->
+  <g transform="translate(0, 380)">
+    <rect x="50" y="0" width="700" height="200" rx="5" ry="5" fill="#E6FFE6" fill-opacity="0.2" stroke="#27AE60" stroke-width="1" stroke-dasharray="5,5" />
+    <text x="400" y="20" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#27AE60">Second Level Conversation Handler (add_member_conv)</text>
+    
+    <!-- Second Level States -->
+    <rect x="100" y="40" width="150" height="40" rx="5" ry="5" fill="#E6FFE6" stroke="#27AE60" />
+    <text x="175" y="65" text-anchor="middle" font-family="Arial" font-size="12">ADDING_MEMBER</text>
+    
+    <rect x="100" y="100" width="150" height="40" rx="5" ry="5" fill="#E6FFE6" stroke="#27AE60" />
+    <text x="175" y="125" text-anchor="middle" font-family="Arial" font-size="12">SELECTING_LEVEL</text>
+    
+    <rect x="100" y="160" width="150" height="40" rx="5" ry="5" fill="#E6FFE6" stroke="#27AE60" />
+    <text x="175" y="185" text-anchor="middle" font-family="Arial" font-size="12">SELECTING_GENDER</text>
+    
+    <!-- Arrows for Second Level -->
+    <path d="M175,80 L175,100" stroke="#27AE60" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <path d="M175,140 L175,160" stroke="#27AE60" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="185" y="155" font-family="Arial" font-size="10" fill="#27AE60">Select Parent/Child</text>
+    
+    <!-- Connection from Top to Second Level -->
+    <path d="M250,120 C350,120 350,60 400,60 C450,60 450,400 250,400" stroke="#333" stroke-width="1.5" stroke-dasharray="5,5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="400" y="45" font-family="Arial" font-size="10" fill="#333">Add Family Member</text>
+  </g>
+  
+  <!-- Third Level Conversation Handler -->
+  <g transform="translate(0, 620)">
+    <rect x="50" y="0" width="700" height="200" rx="5" ry="5" fill="#FFF0E6" fill-opacity="0.2" stroke="#E67E22" stroke-width="1" stroke-dasharray="5,5" />
+    <text x="400" y="20" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#E67E22">Third Level Conversation Handler (description_conv)</text>
+    
+    <!-- Third Level States -->
+    <rect x="100" y="40" width="150" height="40" rx="5" ry="5" fill="#FFF0E6" stroke="#E67E22" />
+    <text x="175" y="65" text-anchor="middle" font-family="Arial" font-size="12">Select Gender</text>
+    
+    <rect x="100" y="100" width="150" height="40" rx="5" ry="5" fill="#FFF0E6" stroke="#E67E22" />
+    <text x="175" y="125" text-anchor="middle" font-family="Arial" font-size="12">SELECTING_FEATURE</text>
+    
+    <rect x="100" y="160" width="150" height="40" rx="5" ry="5" fill="#FFF0E6" stroke="#E67E22" />
+    <text x="175" y="185" text-anchor="middle" font-family="Arial" font-size="12">TYPING</text>
+    
+    <!-- Arrows for Third Level -->
+    <path d="M175,80 L175,100" stroke="#E67E22" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <path d="M175,140 L175,160" stroke="#E67E22" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="185" y="155" font-family="Arial" font-size="10" fill="#E67E22">Select Feature</text>
+    
+    <path d="M100,180 C70,180 70,120 100,120" stroke="#E67E22" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="60" y="150" font-family="Arial" font-size="10" fill="#E67E22">Save Input</text>
+    
+    <!-- Connection from Second to Third Level -->
+    <path d="M250,180 C350,180 350,60 400,60 C450,60 450,640 250,640" stroke="#333" stroke-width="1.5" stroke-dasharray="5,5" fill="none" marker-end="url(#arrowhead)" />
+    <text x="400" y="45" font-family="Arial" font-size="10" fill="#333">Select Gender</text>
+    
+    <!-- Connection from Top to Third Level (Add Self) -->
+    <path d="M250,240 C500,240 500,640 250,640" stroke="#333" stroke-width="1.5" stroke-dasharray="5,5" fill="none" marker-end="url(#arrowhead)" />
+  </g>
+  
+  <!-- Meta States -->
+  <g transform="translate(0, 860)">
+    <rect x="50" y="0" width="700" height="100" rx="5" ry="5" fill="#F5F5F5" fill-opacity="0.2" stroke="#7F8C8D" stroke-width="1" stroke-dasharray="5,5" />
+    <text x="400" y="20" text-anchor="middle" font-family="Arial" font-size="16" font-weight="bold" fill="#7F8C8D">Meta States</text>
+    
+    <rect x="100" y="40" width="150" height="40" rx="5" ry="5" fill="#F5F5F5" stroke="#7F8C8D" />
+    <text x="175" y="65" text-anchor="middle" font-family="Arial" font-size="12">STOPPING</text>
+    
+    <rect x="300" y="40" width="150" height="40" rx="5" ry="5" fill="#FFE6E6" stroke="#E74C3C" />
+    <text x="375" y="65" text-anchor="middle" font-family="Arial" font-size="12">END</text>
+    
+    <rect x="500" y="40" width="150" height="40" rx="5" ry="5" fill="#F5F5F5" stroke="#7F8C8D" />
+    <text x="575" y="65" text-anchor="middle" font-family="Arial" font-size="12">/stop Command</text>
+    
+    <!-- Arrows for Meta States -->
+    <path d="M250,60 L300,60" stroke="#7F8C8D" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+    <path d="M450,60 L500,60" stroke="#7F8C8D" stroke-width="1.5" fill="none" marker-end="url(#arrowhead)" />
+  </g>
+  
+  <!-- State Mapping Arrows -->
+  <g transform="translate(0, 0)">
+    <!-- Third to Second Level Mapping -->
+    <path d="M600,700 C650,700 650,480 600,480" stroke="#E67E22" stroke-width="1.5" stroke-dasharray="3,3" fill="none" marker-end="url(#arrowhead)" />
+    <text x="660" y="600" font-family="Arial" font-size="10" fill="#E67E22">map_to_parent: END → SELECTING_LEVEL</text>
+    
+    <!-- Second to Top Level Mapping -->
+    <path d="M600,480 C650,480 650,180 600,180" stroke="#27AE60" stroke-width="1.5" stroke-dasharray="3,3" fill="none" marker-end="url(#arrowhead)" />
+    <text x="660" y="350" font-family="Arial" font-size="10" fill="#27AE60">map_to_parent: END → SELECTING_ACTION</text>
+    
+    <!-- STOPPING Mapping -->
+    <path d="M600,700 C670,700 670,880 250,880" stroke="#E67E22" stroke-width="1.5" stroke-dasharray="3,3" fill="none" marker-end="url(#arrowhead)" />
+    <text x="500" y="850" font-family="Arial" font-size="10" fill="#E67E22">map_to_parent: STOPPING → STOPPING</text>
+  </g>
+  
+  <!-- Arrow Definitions -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#333" />
+    </marker>
+  </defs>
+</g>
+</svg>
