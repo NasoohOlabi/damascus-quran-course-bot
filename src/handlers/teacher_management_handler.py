@@ -53,3 +53,11 @@ async def handle_teacher_management(update: Update, context: ContextTypes.DEFAUL
         "What would you like to do?",
         reply_markup=reply_markup
     )
+
+async def handle_add_teacher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Please enter the teacher's name:")
+    return TEACHER
+
+async def handle_remove_teacher(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Please select a teacher to remove:")
+    return TEACHER
