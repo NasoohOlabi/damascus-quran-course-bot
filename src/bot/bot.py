@@ -15,7 +15,7 @@ bot.
 """
 
 import logging
-from typing import Any
+from typing import Any, Dict, List, Optional
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -27,6 +27,8 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+
+from src.models.student import Student
 
 # Enable logging
 logging.basicConfig(
@@ -40,11 +42,11 @@ logger = logging.getLogger(__name__)
 # State definitions for top level conversation
 SELECTING_ACTION, ADDING_MEMBER, ADDING_SELF, DESCRIBING_SELF = map(chr, range(4))
 # State definitions for second level conversation
-SELECTING_LEVEL, SELECTING_GENDER = map(chr, range(4, 6))
+SELECTING_LEVEL, SELECTING_GENDER = map(chr, range(5, 7))
 # State definitions for descriptions conversation
-SELECTING_FEATURE, TYPING = map(chr, range(6, 8))
+SELECTING_FEATURE, TYPING = map(chr, range(7, 9))
 # Meta states
-STOPPING, SHOWING = map(chr, range(8, 10))
+STOPPING, SHOWING = map(chr, range(9, 11))
 # Shortcut for ConversationHandler.END
 END = ConversationHandler.END
 
@@ -62,7 +64,17 @@ END = ConversationHandler.END
     FEATURES,
     CURRENT_FEATURE,
     CURRENT_LEVEL,
-) = map(chr, range(10, 22))
+) = map(chr, range(11, 23))
+
+# Student related constants
+(
+    STUDENT_FIRSTNAME,
+    STUDENT_MIDDLENAME,
+    STUDENT_LASTNAME,
+    STUDENT_AGE,
+    STUDENT_GROUP,
+    STUDENT_NOTES,
+) = map(chr, range(23, 29))
 
 
 # Helper
@@ -74,19 +86,24 @@ def _name_switcher(level: str) -> tuple[str, str]:
 
 # Top level conversation callbacks
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Select an action: Adding parent/child or show data."""
+    """Select an action: Adding parent/child, yourself, student or show data."""
     text = (
-        "You may choose to add a family member, yourself, show the gathered data, or end the "
+        "You may choose to add a family member, yourself, a student, show the gathered data, or end the "
         "conversation. To abort, simply type /stop."
     )
 
     buttons = [
         [
-            InlineKeyboardButton(text="Add family member", callback_data=str(ADDING_MEMBER)),
+            InlineKeyboardButton(
+                text="Add family member", callback_data=str(ADDING_MEMBER)
+            ),
             InlineKeyboardButton(text="Add yourself", callback_data=str(ADDING_SELF)),
         ],
         [
+            InlineKeyboardButton(text="Add student", callback_data=str(ADDING_STUDENT)),
             InlineKeyboardButton(text="Show data", callback_data=str(SHOWING)),
+        ],
+        [
             InlineKeyboardButton(text="Done", callback_data=str(END)),
         ],
     ]
@@ -130,21 +147,31 @@ async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         return_str = ""
         if level == SELF:
             for person in data[level]:
-                return_str += f"\nName: {person.get(NAME, '-')}, Age: {person.get(AGE, '-')}"
+                return_str += (
+                    f"\nName: {person.get(NAME, '-')}, Age: {person.get(AGE, '-')}"
+                )
+        elif level == "students":
+            for student in data[level]:
+                return_str += (
+                    f"\nStudent: {student.get(STUDNENT_FIRSTNAME, '-')} {student.get(MIDDLENAME, '-')} "
+                    f"{student.get(LASTNAME, '-')}, Age: {student.get(STUDENT_AGE, '-')}, "
+                    f"Group: {student.get(GROUP, '-')}"
+                )
+                if student.get(NOTES):
+                    return_str += f"\n  Notes: {student.get(NOTES, '-')}"
         else:
             male, female = _name_switcher(level)
 
             for person in data[level]:
                 gender = female if person[GENDER] == FEMALE else male
-                return_str += (
-                    f"\n{gender}: Name: {person.get(NAME, '-')}, Age: {person.get(AGE, '-')}"
-                )
+                return_str += f"\n{gender}: Name: {person.get(NAME, '-')}, Age: {person.get(AGE, '-')}"
         return return_str
 
     user_data = context.user_data
     text = f"Yourself:{pretty_print(user_data, SELF)}"
     text += f"\n\nParents:{pretty_print(user_data, PARENTS)}"
     text += f"\n\nChildren:{pretty_print(user_data, CHILDREN)}"
+    text += f"\n\nStudents:{pretty_print(user_data, 'students')}"
 
     buttons = [[InlineKeyboardButton(text="Back", callback_data=str(END))]]
     keyboard = InlineKeyboardMarkup(buttons)
@@ -303,3 +330,122 @@ async def stop_nested(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str
 
     return STOPPING
 
+
+# Student conversation callbacks
+async def adding_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Add a new student to the system."""
+    text = "Please provide the following information about the student."
+
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="First Name", callback_data=str(STUDNENT_FIRSTNAME)
+            ),
+            InlineKeyboardButton(text="Middle Name", callback_data=str(MIDDLENAME)),
+        ],
+        [
+            InlineKeyboardButton(text="Last Name", callback_data=str(LASTNAME)),
+            InlineKeyboardButton(text="Age", callback_data=str(STUDENT_AGE)),
+        ],
+        [
+            InlineKeyboardButton(text="Group", callback_data=str(GROUP)),
+            InlineKeyboardButton(text="Notes", callback_data=str(NOTES)),
+        ],
+        [
+            InlineKeyboardButton(text="Done", callback_data=str(END)),
+            InlineKeyboardButton(text="Cancel", callback_data=str(STOPPING)),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    # Initialize student data structure if it doesn't exist
+    if not context.user_data.get("students"):
+        context.user_data["students"] = []
+
+    # Initialize current student features
+    if not context.user_data.get(START_OVER):
+        context.user_data[FEATURES] = {}
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+    else:
+        await update.message.reply_text(text=text, reply_markup=keyboard)
+
+    context.user_data[START_OVER] = False
+    return SELECTING_FEATURE
+
+
+async def select_student_feature(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> str:
+    """Select a feature to update for the student."""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="First Name", callback_data=str(STUDNENT_FIRSTNAME)
+            ),
+            InlineKeyboardButton(text="Middle Name", callback_data=str(MIDDLENAME)),
+        ],
+        [
+            InlineKeyboardButton(text="Last Name", callback_data=str(LASTNAME)),
+            InlineKeyboardButton(text="Age", callback_data=str(STUDENT_AGE)),
+        ],
+        [
+            InlineKeyboardButton(text="Group", callback_data=str(GROUP)),
+            InlineKeyboardButton(text="Notes", callback_data=str(NOTES)),
+        ],
+        [
+            InlineKeyboardButton(text="Done", callback_data=str(END)),
+        ],
+    ]
+    keyboard = InlineKeyboardMarkup(buttons)
+
+    if not context.user_data.get(START_OVER):
+        text = "Please select a student feature to update."
+        await update.callback_query.answer()
+        await update.callback_query.edit_message_text(text=text, reply_markup=keyboard)
+    else:
+        text = "Got it! Please select another feature to update or press Done when finished."
+        await update.message.reply_text(text=text, reply_markup=keyboard)
+
+    context.user_data[START_OVER] = False
+    return SELECTING_FEATURE
+
+
+async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Save student information and return to main menu."""
+    user_data = context.user_data
+    features = user_data.get(FEATURES, {})
+
+    # Only save if we have at least first name and last name
+    if features.get(STUDNENT_FIRSTNAME) and features.get(LASTNAME):
+        if not user_data.get("students"):
+            user_data["students"] = []
+
+        user_data["students"].append(features.copy())
+
+        # Create a Student object (for future use with save logic)
+        student_dict = {
+            "firstname": features.get(STUDNENT_FIRSTNAME, ""),
+            "middlename": features.get(MIDDLENAME, ""),
+            "lastname": features.get(LASTNAME, ""),
+            "age": int(features.get(STUDENT_AGE, 0))
+            if features.get(STUDENT_AGE, "").isdigit()
+            else 0,
+            "group": features.get(GROUP, ""),
+            "notes": features.get(NOTES, ""),
+        }
+
+        student = Student.from_dict(student_dict)
+        # TODO: Implement actual saving of student data
+        # student.save()
+
+        await update.callback_query.answer("Student information saved!")
+    else:
+        await update.callback_query.answer(
+            "Student needs at least first and last name!"
+        )
+
+    user_data[START_OVER] = True
+    await start(update, context)
+
+    return END
