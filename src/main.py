@@ -14,51 +14,33 @@ Press Ctrl-C on the command line or send a signal to the process to stop the
 bot.
 """
 
-import logging
-from typing import Any
-
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import Update
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
     CommandHandler,
-    ContextTypes,
     ConversationHandler,
     MessageHandler,
     filters,
 )
-
-# Enable logging
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
-)
-# set higher logging level for httpx to avoid all GET and POST requests being logged
-logging.getLogger("httpx").setLevel(logging.WARNING)
-
-logger = logging.getLogger(__name__)
-
-import asyncio
-import os
-
-from dotenv import load_dotenv
-from telegram.ext import Application, CommandHandler
 
 from bot.bot import *
 from src.config.config import BotConfig
 from src.utils.logger import setup_logger
 
 # Initialize logger
-log = setup_logger('Main', 'INFO')
+logger = setup_logger(__name__)
+
 
 def load_config() -> BotConfig:
-    load_dotenv()
     return BotConfig.from_env()
+
 
 def main() -> None:
     """Run the bot."""
-    log.info('Initializing bot application')
+    logger.info("Initializing bot application")
     config = load_config()
-    
+
     application = Application.builder().token(config.TOKEN).build()
 
     # Set up third level ConversationHandler (collecting features)
@@ -88,7 +70,9 @@ def main() -> None:
 
     # Set up second level ConversationHandler (adding a person)
     add_member_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(select_level, pattern="^" + str(ADDING_MEMBER) + "$")],
+        entry_points=[
+            CallbackQueryHandler(select_level, pattern="^" + str(ADDING_MEMBER) + "$")
+        ],
         states={
             SELECTING_LEVEL: [
                 CallbackQueryHandler(select_gender, pattern=f"^{PARENTS}$|^{CHILDREN}$")
@@ -127,6 +111,7 @@ def main() -> None:
             SELECTING_LEVEL: selection_handlers,  # type: ignore[dict-item]
             DESCRIBING_SELF: [description_conv],
             STOPPING: [CommandHandler("start", start)],
+            # TEACHERS_MGMT: [CallbackQueryHandler(handle_teacher_management, pattern="^" + str(TEACHERS_MGMT) + "$")],
         },
         fallbacks=[CommandHandler("stop", stop)],
     )
@@ -136,11 +121,12 @@ def main() -> None:
     # Run the bot until the user presses Ctrl-C
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        log.warning('Shutdown requested via keyboard interrupt')
+        logger.warning("Shutdown requested via keyboard interrupt")
     except Exception as e:
-        log.critical(f'Fatal error: {str(e)}', exc_info=True)
+        logger.critical(f"Fatal error: {str(e)}", exc_info=True)
         raise
