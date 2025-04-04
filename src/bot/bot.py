@@ -15,17 +15,12 @@ bot.
 """
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
     ContextTypes,
     ConversationHandler,
-    MessageHandler,
-    filters,
 )
 
 from src.models.student import Student
@@ -100,7 +95,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
             InlineKeyboardButton(text="Add yourself", callback_data=str(ADDING_SELF)),
         ],
         [
-            InlineKeyboardButton(text="Add student", callback_data=str(ADDING_STUDENT)),
+            InlineKeyboardButton(
+                text="Add student", callback_data=str(STUDENT_FIRSTNAME)
+            ),
             InlineKeyboardButton(text="Show data", callback_data=str(SHOWING)),
         ],
         [
@@ -153,12 +150,12 @@ async def show_data(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         elif level == "students":
             for student in data[level]:
                 return_str += (
-                    f"\nStudent: {student.get(STUDNENT_FIRSTNAME, '-')} {student.get(MIDDLENAME, '-')} "
-                    f"{student.get(LASTNAME, '-')}, Age: {student.get(STUDENT_AGE, '-')}, "
-                    f"Group: {student.get(GROUP, '-')}"
+                    f"\nStudent: {student.get(STUDENT_FIRSTNAME, '-')} {student.get(STUDENT_MIDDLENAME, '-')} "
+                    f"{student.get(STUDENT_LASTNAME, '-')}, Age: {student.get(STUDENT_AGE, '-')}, "
+                    f"Group: {student.get(STUDENT_GROUP, '-')}"
                 )
-                if student.get(NOTES):
-                    return_str += f"\n  Notes: {student.get(NOTES, '-')}"
+                if student.get(STUDENT_NOTES):
+                    return_str += f"\n  Notes: {student.get(STUDENT_NOTES, '-')}"
         else:
             male, female = _name_switcher(level)
 
@@ -339,17 +336,19 @@ async def adding_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     buttons = [
         [
             InlineKeyboardButton(
-                text="First Name", callback_data=str(STUDNENT_FIRSTNAME)
+                text="First Name", callback_data=str(STUDENT_FIRSTNAME)
             ),
-            InlineKeyboardButton(text="Middle Name", callback_data=str(MIDDLENAME)),
+            InlineKeyboardButton(
+                text="Middle Name", callback_data=str(STUDENT_MIDDLENAME)
+            ),
         ],
         [
-            InlineKeyboardButton(text="Last Name", callback_data=str(LASTNAME)),
+            InlineKeyboardButton(text="Last Name", callback_data=str(STUDENT_LASTNAME)),
             InlineKeyboardButton(text="Age", callback_data=str(STUDENT_AGE)),
         ],
         [
-            InlineKeyboardButton(text="Group", callback_data=str(GROUP)),
-            InlineKeyboardButton(text="Notes", callback_data=str(NOTES)),
+            InlineKeyboardButton(text="Group", callback_data=str(STUDENT_GROUP)),
+            InlineKeyboardButton(text="Notes", callback_data=str(STUDENT_NOTES)),
         ],
         [
             InlineKeyboardButton(text="Done", callback_data=str(END)),
@@ -381,17 +380,19 @@ async def select_student_feature(
     buttons = [
         [
             InlineKeyboardButton(
-                text="First Name", callback_data=str(STUDNENT_FIRSTNAME)
+                text="First Name", callback_data=str(STUDENT_FIRSTNAME)
             ),
-            InlineKeyboardButton(text="Middle Name", callback_data=str(MIDDLENAME)),
+            InlineKeyboardButton(
+                text="Middle Name", callback_data=str(STUDENT_MIDDLENAME)
+            ),
         ],
         [
-            InlineKeyboardButton(text="Last Name", callback_data=str(LASTNAME)),
+            InlineKeyboardButton(text="Last Name", callback_data=str(STUDENT_LASTNAME)),
             InlineKeyboardButton(text="Age", callback_data=str(STUDENT_AGE)),
         ],
         [
-            InlineKeyboardButton(text="Group", callback_data=str(GROUP)),
-            InlineKeyboardButton(text="Notes", callback_data=str(NOTES)),
+            InlineKeyboardButton(text="Group", callback_data=str(STUDENT_GROUP)),
+            InlineKeyboardButton(text="Notes", callback_data=str(STUDENT_NOTES)),
         ],
         [
             InlineKeyboardButton(text="Done", callback_data=str(END)),
@@ -417,7 +418,7 @@ async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     features = user_data.get(FEATURES, {})
 
     # Only save if we have at least first name and last name
-    if features.get(STUDNENT_FIRSTNAME) and features.get(LASTNAME):
+    if features.get(STUDENT_FIRSTNAME) and features.get(STUDENT_LASTNAME):
         if not user_data.get("students"):
             user_data["students"] = []
 
@@ -425,14 +426,14 @@ async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
         # Create a Student object (for future use with save logic)
         student_dict = {
-            "firstname": features.get(STUDNENT_FIRSTNAME, ""),
-            "middlename": features.get(MIDDLENAME, ""),
-            "lastname": features.get(LASTNAME, ""),
+            "firstname": features.get(STUDENT_FIRSTNAME, ""),
+            "middlename": features.get(STUDENT_MIDDLENAME, ""),
+            "lastname": features.get(STUDENT_LASTNAME, ""),
             "age": int(features.get(STUDENT_AGE, 0))
             if features.get(STUDENT_AGE, "").isdigit()
             else 0,
-            "group": features.get(GROUP, ""),
-            "notes": features.get(NOTES, ""),
+            "group": features.get(STUDENT_GROUP, ""),
+            "notes": features.get(STUDENT_NOTES, ""),
         }
 
         student = Student.from_dict(student_dict)

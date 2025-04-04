@@ -24,7 +24,39 @@ from telegram.ext import (
     filters,
 )
 
-from bot.bot import *
+from bot.bot import (
+    ADDING_MEMBER,
+    ADDING_SELF,
+    CHILDREN,
+    DESCRIBING_SELF,
+    END,
+    FEMALE,
+    MALE,
+    PARENTS,
+    SELECTING_ACTION,
+    SELECTING_FEATURE,
+    SELECTING_GENDER,
+    SELECTING_LEVEL,
+    SHOWING,
+    STOPPING,
+    STUDENT_FIRSTNAME,
+    TYPING,
+    adding_self,
+    adding_student,
+    ask_for_input,
+    end,
+    end_describing,
+    end_second_level,
+    save_input,
+    save_student,
+    select_feature,
+    select_gender,
+    select_level,
+    show_data,
+    start,
+    stop,
+    stop_nested,
+)
 from src.config.config import BotConfig
 from src.utils.logger import setup_logger
 
