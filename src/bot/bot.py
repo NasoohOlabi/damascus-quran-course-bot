@@ -9,8 +9,11 @@ from telegram.ext import (
 )
 
 from ..config.config import BotConfig
+from ..handlers.teacher_management_handler import (
+    handle_add_teacher,
+    handle_remove_teacher,
+)
 from ..utils.logger import setup_logger
-from ..handlers.teacher_management_handler import handle_add_teacher, handle_remove_teacher
 
 logger = setup_logger(__name__)
 
@@ -98,19 +101,11 @@ async def start_bot(config: BotConfig):
     logger.info("Bot initialized with conversation handler")
     
     try:
-        # Start the bot with polling
-        await application.initialize()
-        await application.start()
-        await application.updater.start_polling()
-        
-        # Keep the application running until stopped
-        await application.updater.stop()
-        await application.stop()
+        await application.run_polling(close_loop=False)
     except Exception as e:
-        logger.error(f"Error starting bot: {str(e)}")
-        raise
+        logger.error(f"Bot stopped with error: {str(e)}")
     finally:
-        # Ensure proper cleanup
+        await application.updater.stop()
         await application.shutdown()
 
 
