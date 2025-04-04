@@ -39,16 +39,13 @@ from bot.bot import (
     SELECTING_LEVEL,
     SHOWING,
     STOPPING,
-    STUDENT_FIRSTNAME,
     TYPING,
     adding_self,
-    adding_student,
     ask_for_input,
     end,
     end_describing,
     end_second_level,
     save_input,
-    save_student,
     select_feature,
     select_gender,
     select_level,
@@ -56,6 +53,9 @@ from bot.bot import (
     start,
     stop,
     stop_nested,
+)
+from conversations.student_conversation import (
+    studentsConversationHandler,
 )
 from src.config.config import BotConfig
 from src.utils.logger import setup_logger
@@ -126,41 +126,12 @@ def main() -> None:
         },
     )
 
-    # Set up student conversation handler
-    student_conv = ConversationHandler(
-        entry_points=[
-            CallbackQueryHandler(
-                adding_student, pattern="^" + str(STUDENT_FIRSTNAME) + "$"
-            )
-        ],
-        states={
-            SELECTING_FEATURE: [
-                CallbackQueryHandler(
-                    ask_for_input,
-                    pattern="^(?!" + str(END) + ")(?!" + str(STOPPING) + ").*$",
-                ),
-                CallbackQueryHandler(save_student, pattern="^" + str(END) + "$"),
-                CallbackQueryHandler(end, pattern="^" + str(STOPPING) + "$"),
-            ],
-            TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
-        },
-        fallbacks=[
-            CommandHandler("stop", stop_nested),
-        ],
-        map_to_parent={
-            # Return to top level menu
-            END: SELECTING_ACTION,
-            # End conversation altogether
-            STOPPING: END,
-        },
-    )
-
     # Set up top level ConversationHandler (selecting action)
     # Because the states of the third level conversation map to the ones of the second level
     # conversation, we need to make sure the top level conversation can also handle them
     selection_handlers = [
         add_member_conv,
-        student_conv,
+        studentsConversationHandler,
         CallbackQueryHandler(show_data, pattern="^" + str(SHOWING) + "$"),
         CallbackQueryHandler(adding_self, pattern="^" + str(ADDING_SELF) + "$"),
         CallbackQueryHandler(end, pattern="^" + str(END) + "$"),
