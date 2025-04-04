@@ -3,34 +3,28 @@ import sys
 from typing import Optional
 
 
-def setup_logger(name: str, level: Optional[int] = None) -> logging.Logger:
-    """Set up logging configuration."""
-    if level is None:
-        level = logging.INFO
-        
-    # Create formatter
-    formatter = logging.Formatter(
-        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    )
+def setup_logger(name: str, level: str = 'INFO') -> logging.Logger:
+    """Configure structured logging with level handling"""
+    log_level = getattr(logging, level.upper(), logging.INFO)
     
-    # Create console handler
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(module)s:%(funcName)s:%(lineno)d - %(message)s'
+    )
+
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setFormatter(formatter)
-    
-    # Configure logger
+
     logger = logging.getLogger(name)
-    logger.setLevel(level)
-    
-    # Remove existing handlers to avoid duplicates
+    logger.setLevel(log_level)
+
+    # Clear existing handlers
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)
-    
-    # Add our handlers
+
     logger.addHandler(console_handler)
-    
+
+    # Configure third-party loggers
+    for lib in ['httpx', 'telegram', 'googleapiclient']:
+        logging.getLogger(lib).setLevel(logging.WARNING)
+
     return logger
-    
-    # Set specific levels for some loggers
-    logging.getLogger('httpx').setLevel(logging.WARNING)
-    logging.getLogger('telegram').setLevel(logging.WARNING)
-    logging.getLogger('googleapiclient').setLevel(logging.WARNING)

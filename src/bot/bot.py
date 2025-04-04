@@ -8,12 +8,12 @@ from telegram.ext import (
     filters,
 )
 
-from ..config.config import BotConfig
-from ..handlers.teacher_management_handler import (
+from src.config.config import BotConfig
+from src.handlers.teacher_management_handler import (
     handle_add_teacher,
     handle_remove_teacher,
 )
-from ..utils.logger import setup_logger
+from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
