@@ -57,15 +57,11 @@ from bot.bot import (
 from conversations.student_conversation import (
     studentsConversationHandler,
 )
-from src.config.config import BotConfig
+from src.load_config import load_config
 from src.utils.logger import setup_logger
 
 # Initialize logger
 logger = setup_logger(__name__)
-
-
-def load_config() -> BotConfig:
-    return BotConfig.from_env()
 
 
 def main() -> None:

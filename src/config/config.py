@@ -7,15 +7,18 @@ from dotenv import load_dotenv
 @dataclass
 class BotConfig:
     TOKEN: str
-    LOG_LEVEL: str = 'INFO'
+    SHEET_ID: str
+    LOG_LEVEL: str = "INFO"
 
     @classmethod
-    def from_env(cls) -> 'BotConfig':
+    def from_env(cls) -> "BotConfig":
         load_dotenv()
-        token = os.getenv('TELEGRAM_BOT_TOKEN')
+        token = os.getenv("TELEGRAM_BOT_TOKEN")
+        sheet_id = os.getenv("GOOGLE_SHEET_ID")
         if not token:
-            raise ValueError('TELEGRAM_BOT_TOKEN missing from environment')
+            raise ValueError("TELEGRAM_BOT_TOKEN missing from environment")
         return cls(
             TOKEN=token,
-            LOG_LEVEL=os.getenv('LOG_LEVEL', 'INFO').upper()
+            SHEET_ID=sheet_id,
+            LOG_LEVEL=os.getenv("LOG_LEVEL", "INFO").upper(),
         )
