@@ -1,13 +1,4 @@
-from telegram import Update
-from telegram.ext import (
-    Application,
-    CallbackQueryHandler,
-    CommandHandler,
-    ContextTypes,
-    ConversationHandler,
-    MessageHandler,
-    filters,
-)
+from telegram.ext import ConversationHandler
 
 # State definitions for top level conversation
 SELECTING_ACTION, ADDING_MEMBER, ADDING_SELF, DESCRIBING_SELF = map(chr, range(4))
@@ -39,10 +30,11 @@ END = ConversationHandler.END
 
 # Student related constants
 (
+    ADDING_STUDENT,
     STUDENT_FIRSTNAME,
     STUDENT_MIDDLENAME,
     STUDENT_LASTNAME,
     STUDENT_AGE,
     STUDENT_GROUP,
     STUDENT_NOTES,
-) = map(chr, range(23, 29))
+) = map(chr, range(23, 30))

@@ -16,24 +16,46 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-# 1. Define your data model using dataclasses
 @dataclass
 class Student:
-    __pk__ = "student_id"  # Define the primary key attribute name
+    """Student data model for storing student information"""
 
-    student_id: str
-    name: str
-    major: str
-    graduation_year: Optional[int] = None  # Optional field
+    __pk__ = "id"  # Define the primary key attribute name
+    id: str
+
+    firstname: str
+    middlename: str
+    lastname: str
+    age: int
+    group: str
+    notes: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "Student":
+        """Create a Student instance from a dictionary
+
+        Args:
+            data: Dictionary containing student data
+
+        Returns:
+            Student: A new Student instance
+        """
+        return cls(**data)
 
 
-def create_student_orm() -> SheetORM:
+def student_repository() -> SheetORM:
+    """
+    The function `student_repository` initializes a SheetORM service for managing student data in a
+    Google Sheets spreadsheet.
+    :return: The `student_repository()` function is returning an instance of `SheetORM` initialized with
+    the Google Sheets service and the `Student` model class.
+    """
     config: BotConfig = load_config()
     # 2. Prepare Credentials and Spreadsheet ID
     # Replace with your actual credentials file path and spreadsheet ID
     # If spreadsheet_id is None, the service will create a new spreadsheet.
     try:
-        with open("./credentials.json", "r") as f:
+        with open("./credentials.json", "r", encoding="utf-8") as f:
             google_credentials = json.load(f)
     except FileNotFoundError:
         print("ERROR: Service account file not found. Please update the path.")

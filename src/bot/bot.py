@@ -18,14 +18,12 @@ import logging
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import (
-    ContextTypes,
-    ConversationHandler,
-)
+from telegram.ext import ContextTypes, ConversationHandler
 
 from config.constants import (
     ADDING_MEMBER,
     ADDING_SELF,
+    ADDING_STUDENT,
     AGE,
     CHILDREN,
     CURRENT_FEATURE,
@@ -47,9 +45,6 @@ from config.constants import (
     START_OVER,
     STOPPING,
     TYPING,
-)
-from conversations.student_conversation import (
-    STUDENT_FIRSTNAME,
 )
 
 # Enable logging
@@ -85,9 +80,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
             InlineKeyboardButton(text="Add yourself", callback_data=str(ADDING_SELF)),
         ],
         [
-            InlineKeyboardButton(
-                text="Add student", callback_data=str(STUDENT_FIRSTNAME)
-            ),
+            InlineKeyboardButton(text="Add student", callback_data=str(ADDING_STUDENT)),
             InlineKeyboardButton(text="Show data", callback_data=str(SHOWING)),
         ],
         [

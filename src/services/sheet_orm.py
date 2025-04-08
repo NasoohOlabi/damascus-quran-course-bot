@@ -1,8 +1,9 @@
 import logging
+from dataclasses import asdict, fields
 from typing import Any, List, Optional, Type, TypeVar
-from dataclasses import fields, asdict
 
 from googleapiclient.errors import HttpError
+
 from .sheets_service import SheetsService
 
 # --- Your existing SheetsService class (with minor logging addition) ---
@@ -280,6 +281,9 @@ class SheetORM:
             logger.error(f"Failed to get row {row_index} for PK '{pk_value}': {e}")
             return None
 
+    def next_pk(self) -> str:
+        pass
+
     def get_all(self) -> List[T]:
         """
         Retrieves all data rows from the sheet and converts them into model instances.
@@ -308,4 +312,5 @@ class SheetORM:
                 )
 
         logger.info(f"Retrieved {len(instances)} {self.model_cls.__name__} instances.")
+        return instances
         return instances

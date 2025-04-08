@@ -8,7 +8,9 @@ from telegram.ext import (
     filters,
 )
 
-from config.constants import (
+from src.bot.bot import ask_for_input, start, stop_nested
+from src.config.constants import (
+    ADDING_STUDENT,
     CURRENT_FEATURE,
     END,
     FEATURES,
@@ -24,8 +26,7 @@ from config.constants import (
     STUDENT_NOTES,
     TYPING,
 )
-from models.student import Student
-from src.bot.bot import save_input, start, stop_nested
+from src.services.student import Student, student_repository
 
 
 # Student conversation callbacks
@@ -124,7 +125,6 @@ async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
         user_data["students"].append(features.copy())
 
-        # Create a Student object (for future use with save logic)
         student_dict = {
             "firstname": features.get(STUDENT_FIRSTNAME, ""),
             "middlename": features.get(STUDENT_MIDDLENAME, ""),
@@ -135,10 +135,10 @@ async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
             "group": features.get(STUDENT_GROUP, ""),
             "notes": features.get(STUDENT_NOTES, ""),
         }
+        repo = student_repository()
+        repo.
 
         student = Student.from_dict(student_dict)
-        # TODO: Implement actual saving of student data
-        # student.save()
 
         await update.callback_query.answer("Student information saved!")
     else:
@@ -152,17 +152,6 @@ async def save_student(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return END
 
 
-async def ask_for_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Prompt user to input data for selected feature."""
-    context.user_data[CURRENT_FEATURE] = update.callback_query.data
-    text = "Okay, tell me."
-
-    await update.callback_query.answer()
-    await update.callback_query.edit_message_text(text=text)
-
-    return TYPING
-
-
 async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """End conversation from InlineKeyboardButton."""
     await update.callback_query.answer()
@@ -173,9 +162,19 @@ async def end(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return END
 
 
+async def save_student_input(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Save input for feature and return to feature selection."""
+    user_data = context.user_data
+    user_data[FEATURES][user_data[CURRENT_FEATURE]] = update.message.text
+
+    user_data[START_OVER] = True
+
+    return await select_student_feature(update, context)
+
+
 studentsConversationHandler = ConversationHandler(
     entry_points=[
-        CallbackQueryHandler(adding_student, pattern="^" + str(STUDENT_FIRSTNAME) + "$")
+        CallbackQueryHandler(adding_student, pattern="^" + str(ADDING_STUDENT) + "$")
     ],
     states={
         SELECTING_FEATURE: [
@@ -186,7 +185,7 @@ studentsConversationHandler = ConversationHandler(
             CallbackQueryHandler(save_student, pattern="^" + str(END) + "$"),
             CallbackQueryHandler(end, pattern="^" + str(STOPPING) + "$"),
         ],
-        TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_input)],
+        TYPING: [MessageHandler(filters.TEXT & ~filters.COMMAND, save_student_input)],
     },
     fallbacks=[
         CommandHandler("stop", stop_nested),

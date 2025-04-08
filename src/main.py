@@ -54,10 +54,8 @@ from bot.bot import (
     stop,
     stop_nested,
 )
-from conversations.student_conversation import (
-    studentsConversationHandler,
-)
-from src.load_config import load_config
+from conversations.student_conversation import studentsConversationHandler
+from src.config.load_config import load_config
 from src.utils.logger import setup_logger
 
 # Initialize logger
